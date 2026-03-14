@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 const RUTINA_DEFAULT = {
   LUNES: {
@@ -577,6 +577,7 @@ export default function GymTracker() {
   const [rutinaEdit, setRutinaEdit] = useState(null);
   const [toast, setToast] = useState(null);
   const [confirmarLimpiar, setConfirmarLimpiar] = useState(false);
+  const hoyBtnRef = useRef(null);
 
   useEffect(() => {
     localStorage.setItem("gym_registros", JSON.stringify(registros));
@@ -611,6 +612,11 @@ export default function GymTracker() {
     return () => clearTimeout(id);
   }, [toast]);
 
+  // Auto-scroll al día de hoy al abrir
+  useEffect(() => {
+    hoyBtnRef.current?.scrollIntoView({ inline: "center", behavior: "smooth", block: "nearest" });
+  }, []);
+
   function mostrarToast(msg) {
     setToast(msg);
   }
@@ -620,6 +626,11 @@ export default function GymTracker() {
     `${semana}_${dia}_${ejercicio}_${serie}_${tipo}`;
 
   const getPeso = (dia, ej, s) => registros[claveRegistro(dia, ej, s, "peso")] || "";
+
+  const getPesoAnterior = (dia, ejNombre, s) => {
+    const semAnt = getWeeksBefore(1)[0];
+    return registros[`${semAnt}_${dia}_${ejNombre}_${s}_peso`] || null;
+  };
 
   function setPeso(dia, ej, s, val) {
     setRegistros((prev) => {
@@ -729,6 +740,17 @@ export default function GymTracker() {
     return max1rm;
   }
 
+  function propagarPeso(dia, ejNombre, desde, totalSeries, valor) {
+    setRegistros((prev) => {
+      const next = { ...prev };
+      for (let s = desde + 1; s < totalSeries; s++) {
+        const k = claveRegistro(dia, ejNombre, s, "peso");
+        if (valor) next[k] = valor; else delete next[k];
+      }
+      return next;
+    });
+  }
+
   function volumenDia(dia) {
     const ejs = rutina[dia]?.ejercicios || [];
     let vol = 0;
@@ -812,6 +834,8 @@ export default function GymTracker() {
         .tag { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 500; letter-spacing: 0.5px; text-transform: uppercase; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
         .hoy-dot { animation: pulse 2s infinite; }
+        @keyframes timerPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+        .timer-urgente { animation: timerPulse 0.6s ease infinite; }
         .peso-input {
           width: 72px; border: 0.5px solid #333; border-radius: 8px;
           padding: 5px 8px; font-size: 13px; background: #1e1e2e;
@@ -953,6 +977,7 @@ export default function GymTracker() {
               return (
                 <button
                   key={dia}
+                  ref={esHoy ? hoyBtnRef : null}
                   className="dia-btn"
                   onClick={() => setDiaActivo(dia)}
                   style={{
@@ -1066,6 +1091,7 @@ export default function GymTracker() {
                       {Array.from({ length: ej.series }).map((_, s) => {
                         const hecha = serieHecha(ej.nombre, s);
                         const peso = getPeso(diaActivo, ej.nombre, s);
+                        const pesoAnt = getPesoAnterior(diaActivo, ej.nombre, s);
                         return (
                           <div key={s} style={{ display: "flex", alignItems: "center", gap: 10 }}>
                             <button
@@ -1079,14 +1105,25 @@ export default function GymTracker() {
                             >{s + 1}</button>
                             <input
                               className="peso-input"
-                              type="number" min="0" step="0.5" placeholder="kg"
+                              type="text" inputMode="decimal" placeholder={pesoAnt ? `${pesoAnt}kg` : "kg"}
                               value={peso}
                               onChange={(e) => setPeso(diaActivo, ej.nombre, s, e.target.value)}
                               style={hecha ? { borderColor: diaData.color + "50" } : {}}
                             />
-                            {peso && (
-                              <span style={{ fontSize: 12, color: "#888" }}>
-                                {parseFloat(peso).toFixed(1)} kg
+                            {peso && s === 0 && ej.series > 1 && (
+                              <button
+                                onClick={() => propagarPeso(diaActivo, ej.nombre, s, ej.series, peso)}
+                                style={{
+                                  background: "none", border: "none", cursor: "pointer",
+                                  fontSize: 10, color: "#444", fontFamily: "'Space Mono', monospace",
+                                  padding: "2px 4px", borderRadius: 4, whiteSpace: "nowrap",
+                                }}
+                                title="Aplicar este peso a todas las series"
+                              >= todas</button>
+                            )}
+                            {!peso && pesoAnt && (
+                              <span style={{ fontSize: 11, color: "#333", fontFamily: "'Space Mono', monospace" }}>
+                                ↑{pesoAnt}
                               </span>
                             )}
                           </div>
@@ -1210,33 +1247,42 @@ export default function GymTracker() {
         <div className="timer-panel" style={{
           position: "fixed", bottom: 0, left: 0, right: 0,
           background: "#0d0d14", borderTop: "1px solid #1e1e2e",
-          padding: "16px 24px", zIndex: 100,
-          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "14px 24px 18px", zIndex: 100,
         }}>
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
-              <p style={{ fontSize: 10, color: "#555", letterSpacing: 1, textTransform: "uppercase", fontFamily: "'Space Mono', monospace" }}>
-                descanso
-              </p>
-              <button
-                onClick={() => setTimerEnabled((v) => !v)}
-                title={timerEnabled ? "Desactivar timer automático" : "Activar timer automático"}
-                style={{
-                  background: "none", border: "none", cursor: "pointer",
-                  fontSize: 12, opacity: timerEnabled ? 1 : 0.4, lineHeight: 1,
-                }}
-              >
-                {timerEnabled ? "🔔" : "🔕"}
-              </button>
-            </div>
-            <p style={{
-              fontFamily: "'Space Mono', monospace", fontSize: 30, fontWeight: 700,
-              color: timer.restantes <= 10 ? "#f87171" : "#f0f0f5",
-              transition: "color 0.3s",
-            }}>
-              {String(Math.floor(timer.restantes / 60)).padStart(2, "0")}:{String(timer.restantes % 60).padStart(2, "0")}
-            </p>
+          {/* Barra de progreso */}
+          <div style={{ height: 3, background: "#1e1e2e", borderRadius: 2, marginBottom: 12, overflow: "hidden" }}>
+            <div style={{
+              height: "100%", borderRadius: 2,
+              width: `${(timer.restantes / timer.duracion) * 100}%`,
+              background: timer.restantes <= 10 ? "#f87171" : "#4ade80",
+              transition: "width 1s linear, background 0.3s",
+            }} />
           </div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
+                <p style={{ fontSize: 10, color: "#555", letterSpacing: 1, textTransform: "uppercase", fontFamily: "'Space Mono', monospace" }}>
+                  descanso
+                </p>
+                <button
+                  onClick={() => setTimerEnabled((v) => !v)}
+                  title={timerEnabled ? "Desactivar timer automático" : "Activar timer automático"}
+                  style={{
+                    background: "none", border: "none", cursor: "pointer",
+                    fontSize: 12, opacity: timerEnabled ? 1 : 0.4, lineHeight: 1,
+                  }}
+                >
+                  {timerEnabled ? "🔔" : "🔕"}
+                </button>
+              </div>
+              <p className={timer.restantes <= 10 ? "timer-urgente" : ""} style={{
+                fontFamily: "'Space Mono', monospace", fontSize: 40, fontWeight: 700,
+                color: timer.restantes <= 10 ? "#f87171" : "#f0f0f5",
+                lineHeight: 1, transition: "color 0.3s",
+              }}>
+                {String(Math.floor(timer.restantes / 60)).padStart(2, "0")}:{String(timer.restantes % 60).padStart(2, "0")}
+              </p>
+            </div>
           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
             {[60, 90, 120].map((s) => (
               <button
@@ -1264,6 +1310,7 @@ export default function GymTracker() {
                 padding: "5px 10px", fontSize: 13, cursor: "pointer",
               }}
             >✕</button>
+          </div>
           </div>
         </div>
       )}

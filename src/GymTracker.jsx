@@ -118,9 +118,28 @@ export default function GymTracker() {
     });
   }
 
-  function toggleSerie(ejercicio, serie) {
-    const clave = claveRegistro(diaActivo, ejercicio, serie, "check");
-    setRegistros(prev => ({ ...prev, [clave]: !prev[clave] }));
+  function toggleSerie(ejercicio, totalSeries, clickedIdx) {
+    setRegistros(prev => {
+      const next = { ...prev };
+      const allDoneUpTo = Array.from({ length: clickedIdx + 1 }, (_, s) => s)
+        .every(s => next[claveRegistro(diaActivo, ejercicio, s, "check")]);
+      if (allDoneUpTo) {
+        // desmarcar desde clickedIdx hacia adelante
+        for (let s = clickedIdx; s < totalSeries; s++) {
+          delete next[claveRegistro(diaActivo, ejercicio, s, "check")];
+        }
+      } else {
+        // marcar del 0 hasta clickedIdx
+        for (let s = 0; s <= clickedIdx; s++) {
+          next[claveRegistro(diaActivo, ejercicio, s, "check")] = true;
+        }
+        // desmarcar los que queden después
+        for (let s = clickedIdx + 1; s < totalSeries; s++) {
+          delete next[claveRegistro(diaActivo, ejercicio, s, "check")];
+        }
+      }
+      return next;
+    });
   }
 
   function serieHecha(ejercicio, serie) {
@@ -399,7 +418,7 @@ export default function GymTracker() {
                       <div key={s} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                         <button
                           className={`serie-circle ${hecha ? "hecha" : ""}`}
-                          onClick={() => toggleSerie(ej.nombre, s)}
+                          onClick={() => toggleSerie(ej.nombre, ej.series, s)}
                           style={{
                             color: hecha ? "#0a0a0f" : diaData.color,
                             background: hecha ? diaData.color : "transparent",

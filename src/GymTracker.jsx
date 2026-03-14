@@ -729,6 +729,54 @@ export default function GymTracker() {
     return max1rm;
   }
 
+  function volumenDia(dia) {
+    const ejs = rutina[dia]?.ejercicios || [];
+    let vol = 0;
+    ejs.forEach(e => {
+      for (let s = 0; s < e.series; s++) {
+        if (registros[claveRegistro(dia, e.nombre, s, "check")]) {
+          const p = parseFloat(registros[claveRegistro(dia, e.nombre, s, "peso")]);
+          if (!isNaN(p) && p > 0) vol += p * e.reps;
+        }
+      }
+    });
+    return vol > 0 ? vol : null;
+  }
+
+  function generarTextoResumen() {
+    const emojisEstado = { completado: "✅", parcial: "⏳", descanso: "😴" };
+    const lineas = DIAS.map(dia => {
+      const prog = progresoDia(dia);
+      const label = rutina[dia]?.label || "";
+      const nombre = dia.charAt(0) + dia.slice(1).toLowerCase();
+      if (!prog) return `${emojisEstado.descanso} ${nombre.toUpperCase()} – Descanso`;
+      const pct = prog.pct;
+      const icono = pct === 100 ? emojisEstado.completado : emojisEstado.parcial;
+      return `${icono} ${nombre.toUpperCase()} – ${label} (${pct}%)`;
+    });
+
+    const volSemana = DIAS.reduce((acc, dia) => {
+      const v = volumenDia(dia);
+      return acc + (v || 0);
+    }, 0);
+    const streak = calcularStreak(registros, rutina);
+
+    let texto = `XIME Gym Tracker 💪\nSemana del ${semana}\n\n${lineas.join("\n")}`;
+    if (streak > 0) texto += `\n\n🔥 ${streak} ${streak === 1 ? "semana" : "semanas"} consecutivas`;
+    if (volSemana > 0) texto += `\n💪 Total: ${volSemana.toLocaleString("es")} kg movidos esta semana`;
+    return texto;
+  }
+
+  async function compartirResumen() {
+    const texto = generarTextoResumen();
+    if (navigator.share) {
+      try { await navigator.share({ title: "XIME Gym Tracker", text: texto }); } catch {}
+    } else {
+      await navigator.clipboard.writeText(texto);
+      mostrarToast("Copiado al portapapeles ✓");
+    }
+  }
+
   const hoy = getHoy();
   const progDiaActivo = progresoDia(diaActivo);
   const streak = calcularStreak(registros, rutina);
@@ -848,7 +896,7 @@ export default function GymTracker() {
               className={"icon-btn" + (vista === "historial" ? " active" : "")}
               onClick={() => setVista((v) => v === "historial" ? "tracker" : "historial")}
               title="Historial"
-            >📊</button>
+            ><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></button>
             <button
               className={"icon-btn" + (vista === "editor" ? " active" : "")}
               onClick={() => {
@@ -861,7 +909,7 @@ export default function GymTracker() {
                 }
               }}
               title="Editar rutina"
-            >✏️</button>
+            ><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
           </div>
         </div>
       </div>
@@ -959,6 +1007,11 @@ export default function GymTracker() {
                   <div className="progress-bar-fill" style={{ width: `${progDiaActivo.pct}%`, background: diaData?.color }} />
                 </div>
               )}
+              {(() => { const vol = volumenDia(diaActivo); return vol ? (
+                <p style={{ fontSize: 11, color: "#555", marginTop: 6, fontFamily: "'Space Mono', monospace" }}>
+                  ≈ {vol.toLocaleString("es")} kg movidos
+                </p>
+              ) : null; })()}
             </div>
 
             {/* Ejercicios */}
@@ -1066,11 +1119,23 @@ export default function GymTracker() {
                 <p style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, letterSpacing: 2, color: "#444", textTransform: "uppercase" }}>
                   Resumen semanal
                 </p>
-                {streak > 0 && (
-                  <span style={{ fontSize: 12, color: "#666", fontFamily: "'Space Mono', monospace" }}>
-                    🔥 {streak} {streak === 1 ? "semana" : "semanas"}
-                  </span>
-                )}
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  {streak > 0 && (
+                    <span style={{ fontSize: 12, color: "#666", fontFamily: "'Space Mono', monospace" }}>
+                      🔥 {streak} {streak === 1 ? "semana" : "semanas"}
+                    </span>
+                  )}
+                  <button
+                    onClick={compartirResumen}
+                    className="icon-btn"
+                    title="Compartir resumen"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                      <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                    </svg>
+                  </button>
+                </div>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6 }}>
                 {DIAS.map((dia) => {

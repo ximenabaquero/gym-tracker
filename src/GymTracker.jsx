@@ -105,15 +105,26 @@ export default function GymTracker() {
   }, [semana]);
 
   const diaData = rutina[diaActivo];
-  const claveRegistro = (dia, ejercicio, serie) => `${semana}_${dia}_${ejercicio}_${serie}`;
+  const claveRegistro = (dia, ejercicio, serie, tipo = "check") => `${semana}_${dia}_${ejercicio}_${serie}_${tipo}`;
+
+  const getPeso = (dia, ej, s) => registros[claveRegistro(dia, ej, s, "peso")] || "";
+
+  function setPeso(dia, ej, s, val) {
+    setRegistros(prev => {
+      const next = { ...prev };
+      const k = claveRegistro(dia, ej, s, "peso");
+      if (val) next[k] = val; else delete next[k];
+      return next;
+    });
+  }
 
   function toggleSerie(ejercicio, serie) {
-    const clave = claveRegistro(diaActivo, ejercicio, serie);
+    const clave = claveRegistro(diaActivo, ejercicio, serie, "check");
     setRegistros(prev => ({ ...prev, [clave]: !prev[clave] }));
   }
 
   function serieHecha(ejercicio, serie) {
-    return !!registros[claveRegistro(diaActivo, ejercicio, serie)];
+    return !!registros[claveRegistro(diaActivo, ejercicio, serie, "check")];
   }
 
   function progresoDia(dia) {
@@ -123,7 +134,7 @@ export default function GymTracker() {
     ejs.forEach(e => {
       for (let s = 0; s < e.series; s++) {
         total++;
-        if (registros[claveRegistro(dia, e.nombre, s)]) hechas++;
+        if (registros[claveRegistro(dia, e.nombre, s, "check")]) hechas++;
       }
     });
     return { total, hechas, pct: Math.round((hechas / total) * 100) };
@@ -213,6 +224,20 @@ export default function GymTracker() {
         .hoy-dot {
           animation: pulse 2s infinite;
         }
+
+        .peso-input {
+          width: 72px;
+          border: 0.5px solid #333;
+          border-radius: 8px;
+          padding: 5px 8px;
+          font-size: 13px;
+          background: #1e1e2e;
+          color: #f0f0f5;
+          text-align: center;
+          outline: none;
+        }
+        .peso-input:focus { border-color: #666; }
+        .peso-input::placeholder { color: #444; }
       `}</style>
 
       {/* Header */}
@@ -366,22 +391,39 @@ export default function GymTracker() {
                   </span>
                 </div>
 
-                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                   {Array.from({ length: ej.series }).map((_, s) => {
                     const hecha = serieHecha(ej.nombre, s);
+                    const peso = getPeso(diaActivo, ej.nombre, s);
                     return (
-                      <button
-                        key={s}
-                        className={`serie-circle ${hecha ? "hecha" : ""}`}
-                        onClick={() => toggleSerie(ej.nombre, s)}
-                        style={{
-                          color: hecha ? "#0a0a0f" : diaData.color,
-                          background: hecha ? diaData.color : "transparent",
-                          borderColor: diaData.color,
-                        }}
-                      >
-                        {s + 1}
-                      </button>
+                      <div key={s} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                        <button
+                          className={`serie-circle ${hecha ? "hecha" : ""}`}
+                          onClick={() => toggleSerie(ej.nombre, s)}
+                          style={{
+                            color: hecha ? "#0a0a0f" : diaData.color,
+                            background: hecha ? diaData.color : "transparent",
+                            borderColor: diaData.color,
+                          }}
+                        >
+                          {s + 1}
+                        </button>
+                        <input
+                          className="peso-input"
+                          type="number"
+                          min="0"
+                          step="0.5"
+                          placeholder="kg"
+                          value={peso}
+                          onChange={e => setPeso(diaActivo, ej.nombre, s, e.target.value)}
+                          style={hecha ? { borderColor: diaData.color + "50" } : {}}
+                        />
+                        {peso && (
+                          <span style={{ fontSize: 12, color: "#888" }}>
+                            {parseFloat(peso).toFixed(1)} kg
+                          </span>
+                        )}
+                      </div>
                     );
                   })}
                 </div>
